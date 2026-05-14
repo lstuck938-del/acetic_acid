@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>乙酸分子球棍模型 - 精确键角 (sp² 羧基 + sp³ 甲基)</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', system-ui; }
+        #info {
+            position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(8px); color: white; padding: 8px 18px;
+            border-radius: 32px; pointer-events: none; z-index: 10;
+            font-size: 14px; border-left: 4px solid #66ff99;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        #controls-tip {
+            position: absolute; bottom: 20px; left: 20px;
+            background: rgba(0,0,0,0.5); color: #ddd; padding: 5px 12px;
+            border-radius: 20px; font-size: 12px; pointer-events: none;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        🧪 乙酸 (CH₃COOH) | 羧基平面三角 (120°) | 甲基四面体 (109.5°)
+    </div>
+    <div id="controls-tip">
+        🖱️ 鼠标拖拽旋转 | 右键平移 | 滚轮缩放
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // --- 初始化场景 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050b1a);
+        scene.fog = new THREE.FogExp2(0x050b1a, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(3.8, 2.2, 4.8);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.left = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        document.body.appendChild(labelRenderer.domElement);
+
+        // 控制器
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.rotateSpeed = 1.2;
+        controls.zoomSpeed = 1.2;
+        controls.panSpeed = 0.8;
+        controls.target.set(0, 0.1, 0);
+
+        // --- 光照 (丰富立体感) ---
+        const ambientLight = new THREE.AmbientLight(0x404060);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(2, 4, 3);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        const backLight = new THREE.PointLight(0xffaa66, 0.5);
+        backLight.position.set(-2, 1, -3);
+        scene.add(backLight);
+        const fillLight = new THREE.PointLight(0x88aaff, 0.4);
+        fillLight.position.set(0, -1.5, 1.5);
+        scene.add(fillLight);
+        const rimLight = new THREE.PointLight(0xffcc88, 0.4);
+        rimLight.position.set(1.5, 1.2, 2);
+        scene.add(rimLight);
+        const hemiLight = new THREE.HemisphereLight(0x6c7c9c, 0x2c2c3c, 0.5);
+        scene.add(hemiLight);
+
+        // 辅助网格
+        const gridHelper = new THREE.GridHelper(7, 20, 0x88aaff, 0x335588);
+        gridHelper.position.y = -1.3;
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.2;
+        scene.add(gridHelper);
+
+        // --- 原子样式 ---
+        const colors = { C: 0x708090, O: 0xE34234, H: 0xE8E8E8 };
+        const radii = { C: 0.42, O: 0.38, H: 0.24 };
+
+        // ========= 1. 构建羧基部分 (平面三角，键角 120°) =========
+        // 羧基碳位于原点
+        const C_carb = new THREE.Vector3(0, 0, 0);
+        // 双键氧：沿 +X 方向，键长 1.22
+        const O_double = new THREE.Vector3(1.22, 0, 0);
+        // 羟基氧：与 C=O 夹角 120°，位于 XY 平面内，指向 -X 和 +Y 方向
+        // 夹角 120° 意味着方向角 120° (从 +X 轴逆时针)
+        const angleCOH = 120 * Math.PI / 180; // 120°
+        const bondLength_COH = 1.36;
+        const O_hydroxy_dir = new THREE.Vector3(Math.cos(angleCOH), Math.sin(angleCOH), 0);
+        const O_hydroxy = C_carb.clone().add(O_hydroxy_dir.multiplyScalar(bondLength_COH));
+        
+        // 羟基氢：C–O–H 键角 ~107°，并且不在羧基平面内，略微翘起 (增加立体感)
+        // 先计算从 O 指向 C 的方向的反向，再旋转 107° 并略微出平面
+        const ocVec = new THREE.Vector3().subVectors(C_carb, O_hydroxy).normalize();
+        // 构建一个垂直于羧基平面 (XY 平面) 的轴: Z 轴
+        const perpAxis = new THREE.Vector3(0, 0, 1);
+        // 旋转 107° 得到 O-H 方向 (略微偏离平面，模拟真实构象)
+        const ohAngle = 107 * Math.PI / 180;
+        const quatOH = new THREE.Quaternion().setFromUnitVectors(ocVec, perpAxis);
+        const ohDir = ocVec.clone().applyQuaternion(quatOH).normalize();
+        // 更直接的方法：绕垂直于 (O-C) 的轴旋转 ohAngle，并让氢稍微向上翘
+        const rotAxis = new THREE.Vector3(0, 1, 0).cross(ocVec).normalize();
+        const ohFinalDir = ocVec.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(rotAxis, ohAngle));
+        // 添加一个小的 Z 偏移，避免完全平面化
+        ohFinalDir.z += 0.25;
+        ohFinalDir.normalize();
+        const H_hydroxy = O_hydroxy.clone().add(ohFinalDir.multiplyScalar(0.96));
+        
+        // ========= 2. 甲基碳：相对于羧基碳，方向指向 (-0.7, -0.6, -0.5) 归一化后乘键长 1.54 =========
+        const methylDir = new THREE.Vector3(-0.7, -0.6, -0.5).normalize();
+        const C_methyl = C_carb.clone().add(methylDir.multiplyScalar(1.54));
+        
+        // ========= 3. 甲基的三个氢：标准四面体方向 (与 C–C 键夹角 109.5°) =========
+        // 向量 v0 从甲基碳指向羧基碳
+        const v0 = new THREE.Vector3().subVectors(C_carb, C_methyl).normalize();
+        // 构造四面体其他三个方向 (标准方法：取正四面体四个顶点，旋转使一个顶点对齐 v0)
+        const tetVectors = [
+            new THREE.Vector3(1, 1, 1),
+            new THREE.Vector3(1, -1, -1),
+            new THREE.Vector3(-1, 1, -1),
+            new THREE.Vector3(-1, -1, 1)
+        ].map(v => v.normalize());
+        // 旋转使得 tetVectors[0] 指向 v0
+        const quat = new THREE.Quaternion().setFromUnitVectors(tetVectors[0], v0);
+        const hDirs = tetVectors.slice(1).map(v => v.clone().applyQuaternion(quat).normalize());
+        const bondLength_CH = 1.09;
+        const H_methyl = hDirs.map(dir => C_methyl.clone().add(dir.multiplyScalar(bondLength_CH)));
+        
+        // 收集所有原子
+        const atoms = [
+            { element: 'C', pos: C_carb, name: 'C (羧基)' },
+            { element: 'O', pos: O_double, name: 'O (双键)' },
+            { element: 'O', pos: O_hydroxy, name: 'O (羟基)' },
+            { element: 'H', pos: H_hydroxy, name: 'H (羟基)' },
+            { element: 'C', pos: C_methyl, name: 'C (甲基)' },
+            { element: 'H', pos: H_methyl[0], name: 'H' },
+            { element: 'H', pos: H_methyl[1], name: 'H' },
+            { element: 'H', pos: H_methyl[2], name: 'H' }
+        ];
+        
+        // 化学键连接
+        const bondPairs = [
+            { from: C_carb, to: O_double, type: 'double' },
+            { from: C_carb, to: O_hydroxy, type: 'single' },
+            { from: O_hydroxy, to: H_hydroxy, type: 'single' },
+            { from: C_carb, to: C_methyl, type: 'single' },
+            { from: C_methyl, to: H_methyl[0], type: 'single' },
+            { from: C_methyl, to: H_methyl[1], type: 'single' },
+            { from: C_methyl, to: H_methyl[2], type: 'single' }
+        ];
+        
+        // --- 工具函数：圆柱体 (单键) ---
+        function createCylBetween(p1, p2, radius, colorHex, roughness = 0.4) {
+            const start = new THREE.Vector3(p1.x, p1.y, p1.z);
+            const end = new THREE.Vector3(p2.x, p2.y, p2.z);
+            const dir = new THREE.Vector3().subVectors(end, start);
+            const length = dir.length();
+            const geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
+            const material = new THREE.MeshStandardMaterial({ color: colorHex, roughness: roughness, metalness: 0.3 });
+            const cylinder = new THREE.Mesh(geometry, material);
+            const center = start.clone().add(end).multiplyScalar(0.5);
+            cylinder.position.copy(center);
+            cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+            return cylinder;
+        }
+        
+        // 双键：两根平行圆柱
+        function createDoubleBond(p1, p2, radius, offsetDist, colorHex) {
+            const start = new THREE.Vector3(p1.x, p1.y, p1.z);
+            const end = new THREE.Vector3(p2.x, p2.y, p2.z);
+            const dir = new THREE.Vector3().subVectors(end, start).normalize();
+            let up = new THREE.Vector3(0, 1, 0);
+            if (Math.abs(dir.dot(up)) > 0.9999) up = new THREE.Vector3(1, 0, 0);
+            const right = new THREE.Vector3().crossVectors(dir, up).normalize();
+            const offset = right.multiplyScalar(offsetDist);
+            const cyl1 = createCylBetween(start.clone().add(offset), end.clone().add(offset), radius, colorHex);
+            const cyl2 = createCylBetween(start.clone().sub(offset), end.clone().sub(offset), radius, colorHex);
+            return [cyl1, cyl2];
+        }
+        
+        // 生成所有键
+        bondPairs.forEach(bond => {
+            if (bond.type === 'single') {
+                const cyl = createCylBetween(bond.from, bond.to, 0.055, 0xbcbcbc);
+                scene.add(cyl);
+            } else if (bond.type === 'double') {
+                const cyls = createDoubleBond(bond.from, bond.to, 0.048, 0.11, 0xc8c8e0);
+                cyls.forEach(c => scene.add(c));
+            }
+        });
+        
+        // 生成原子球体和CSS2D标签
+        atoms.forEach(atom => {
+            const geometry = new THREE.SphereGeometry(radii[atom.element], 64, 64);
+            const material = new THREE.MeshStandardMaterial({
+                color: colors[atom.element],
+                roughness: atom.element === 'H' ? 0.6 : 0.35,
+                metalness: atom.element === 'C' ? 0.25 : 0.1,
+                emissive: atom.element === 'O' ? 0x110000 : 0x000000
+            });
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.position.copy(atom.pos);
+            sphere.castShadow = true;
+            scene.add(sphere);
+            
+            // 标签
+            const div = document.createElement('div');
+            div.textContent = atom.element;
+            div.style.color = '#f5f5f5';
+            div.style.fontSize = '18px';
+            div.style.fontWeight = 'bold';
+            div.style.background = 'rgba(15, 25, 45, 0.75)';
+            div.style.padding = '2px 9px';
+            div.style.borderRadius = '28px';
+            div.style.border = `1.5px solid ${new THREE.Color(colors[atom.element]).getStyle()}`;
+            div.style.backdropFilter = 'blur(4px)';
+            div.style.fontFamily = 'monospace';
+            const label = new CSS2DObject(div);
+            // 智能偏移避免遮挡
+            let offset = new THREE.Vector3(0.5, 0.5, 0.5);
+            if (atom.name.includes('甲基')) offset.set(0.6, -0.6, 0.4);
+            if (atom.element === 'O' && atom.name.includes('双键')) offset.set(0.65, 0.3, 0.3);
+            if (atom.element === 'H' && atom.name.includes('羟基')) offset.set(0.4, 0.6, 0.4);
+            label.position.copy(atom.pos.clone().add(offset));
+            scene.add(label);
+        });
+        
+        // --- 装饰：星空粒子 ---
+        const starCount = 800;
+        const starGeometry = new THREE.BufferGeometry();
+        const starPositions = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount; i++) {
+            starPositions[i*3] = (Math.random() - 0.5) * 200;
+            starPositions[i*3+1] = (Math.random() - 0.5) * 100;
+            starPositions[i*3+2] = (Math.random() - 0.5) * 80 - 30;
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMaterial = new THREE.PointsMaterial({ color: 0xaaccff, size: 0.08, transparent: true, opacity: 0.6 });
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+        
+        // 辅助透明球体线框
+        const helperSphereGeo = new THREE.SphereGeometry(2.2, 32, 32);
+        const wireMat = new THREE.MeshBasicMaterial({ color: 0x4488aa, wireframe: true, transparent: true, opacity: 0.06 });
+        const glowSphere = new THREE.Mesh(helperSphereGeo, wireMat);
+        scene.add(glowSphere);
+        
+        // 动画
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.004;
+            stars.rotation.y = time * 0.03;
+            stars.rotation.x = Math.sin(time * 0.1) * 0.05;
+            glowSphere.rotation.y = time * 0.05;
+            glowSphere.rotation.x = time * 0.03;
+            rimLight.intensity = 0.45 + Math.sin(time * 1.5) * 0.07;
+            controls.update();
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+        animate();
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        console.log('乙酸模型加载完成 | 羧基三角平面 (120°) | 甲基四面体 (109.5°)');
+    </script>
+</body>
+</html>
